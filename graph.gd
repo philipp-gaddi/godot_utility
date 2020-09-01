@@ -1,152 +1,374 @@
 extends Node
 
-# this file contains some graph methods
-# ref was wikipedia
 
-
-
-class Vertex: 
-	var visited
-	var value
+class Vertex:
 	
-	func _init(init_value=""):
-		self.value = init_value
+	var type:String
+	var data:Dictionary
+	var visited
+	var position:Vector2
+	var id # set by graph
+	
+	func _init(init_type="", init_position=Vector2(), init_data={}):
+		
+		type = init_type
+		position = init_position
+		data = init_data
 		visited = false
 	
 	func _to_string():
 		
-		return str(value)
-
-
-class Graph: # no edge weight
+		return str(id)
 	
-	# implementation as adjacency list
-	var nodes:Dictionary # Vertex:Array of Vertex
+
+class Graph:
+	
+	var in_vertices
+	var out_vertices
+	var vertices
+	var edge_weights
+	var vertex_id_counter
 	
 	func _init():
-		nodes = {}
+		in_vertices = {}
+		out_vertices = {}
+		vertices = []
+		edge_weights = {}
+		vertex_id_counter = 0
 	
-	func adjacent(vertex_a:Vertex, vertex_b:Vertex)->bool:
+	func adjacent(vertex_A, vertex_B):
 		
-		return vertex_b in neighbours(vertex_a) and vertex_a in neighbours(vertex_b)
+		return vertex_A in neighbours(vertex_B)
 	
-	func neighbours(vertex:Vertex):
-		return nodes.get(vertex)
+	func neighbours(vertex):
+		
+		return in_vertices[vertex] + out_vertices[vertex]
 	
-	func add_vertex(new_vertex:Vertex):
-		if nodes.get(new_vertex) == null:
-			
-			nodes[new_vertex] = []
-		else:
-			print("vertex already exists in graph")
+	func non_neighbours(vertex):
+		var non_neighbours = []
+		var neighbours = neighbours(vertex)
+		
+		for v in vertices:
+			if v!=vertex and not v in neighbours:
+				non_neighbours.append(v)
+		
+		return non_neighbours
 	
-	func remove_vertex(vertex:Vertex):
-		if nodes.get(vertex) == null:
-			
+	func incoming_neighbours(vertex):
+		
+		return in_vertices[vertex]
+	
+	func outgoing_neighbours(vertex):
+		
+		return out_vertices[vertex]
+	
+	func add_vertex(vertex):
+		
+		if vertex in vertices:
+			print('vertex already exists in graph')
 			return
 		
-		for n in neighbours(vertex):
-			nodes.get(n).erase(vertex)
-		
-		nodes.erase(vertex)
-		# free vertex? look up gdscript gc
+		vertex.id = vertex_id_counter
+		vertex_id_counter += 1
+		in_vertices[vertex] = []
+		out_vertices[vertex] = []
+		vertices.append(vertex)
 	
-	func add_edge(vertex_a:Vertex, vertex_b:Vertex):
+	func remove_vertex(vertex):
 		
-		nodes.get(vertex_b).append(vertex_a)
-		nodes.get(vertex_a).append(vertex_b)
+		in_vertices.erase(vertex)
+		out_vertices.erase(vertex)
+		vertices.erase(vertex)
+		
+		# todo check deleting while traversing
+		for v in in_vertices.keys():
+			in_vertices[v].erase(vertex)
+		
+		for v in out_vertices.keys():
+			out_vertices[v].erase(vertex)
+		
+		for e in edge_weights:
+			if vertex in e:
+				edge_weights.erase(e)
+		
 	
-	func remove_edge(vertex_a:Vertex, vertex_b:Vertex):
+	func add_edge(vertex_A, vertex_B):
 		
-		if not adjacent(vertex_a, vertex_b):
+		if not vertex_A in vertices or not vertex_B in vertices:
+			print('vertices don\'t exist')
 			return
 		
-		nodes.get(vertex_a).erase(vertex_b)
-		nodes.get(vertex_b).erase(vertex_a)
+		if vertex_B in out_vertices[vertex_A] or \
+			vertex_A in in_vertices[vertex_B]:
+				print('edge exists')
+				return
+		
+		out_vertices[vertex_A].append(vertex_B)
+		in_vertices[vertex_B].append(vertex_A)
+		edge_weights[[vertex_A, vertex_B]] = 1.0
 	
-	func reset_visit():
+	func remove_edge(vertex_A, vertex_B):
 		
-		for k in nodes.keys():
-			k.visited = false
+		out_vertices[vertex_A].erase(vertex_B)
+		in_vertices[vertex_B].erase(vertex_A)
+		edge_weights.erase([vertex_A, vertex_B])
 	
-	func depth_first_search(value, start_vertex=null):
-		if start_vertex == null:
-			start_vertex = nodes.keys()[1]
+	func reset_visited():
 		
-		var vertex_stack = [start_vertex]
+		for v in vertices:
+			v.visited = false
+	
+	func _to_string():
 		
-		while not vertex_stack.empty():
-			var vertex = vertex_stack.pop_front()
+		return str(in_vertices) + str(out_vertices)
+
+static func save_graph(G:Graph, path="user://saves/graph"):
+	var file = File.new()
+	file.open(path, File.WRITE)
+	file.store_var(G)
+	file.close()
+
+static func load_graph(path="user://saves/graph"):
+	var file = File.new()
+	file.open(path, File.READ)
+	var G = file.get_var()
+	file.close()
+	return G
+
+class GraphPatternMatch:
+	# VF2
+	var sub_graph:Graph
+	
+	func _init(init_sub_graph:Graph):
+		
+		sub_graph = init_sub_graph
+	
+	func match_pattern():
+		
+		
+		return []
+
+class DFS_itr:
+	# can continue searches after founding a matching vertex
+	signal dfs_run
+	
+	var result
+	var done
+	var started
+	var graph
+	var start_vertex
+	var type
+	
+	func _init(G:Graph, init_type, vertex:Vertex):
+		
+		start_vertex = vertex
+		self.graph = G
+		self.type = init_type
+		self.done = false
+		self.started = false
+		self.result = null
+	
+	func next():
+		if not started:
+			started = true
+			run()
+		elif not done:
+			emit_signal("dfs_run")
+	
+	# G has to be unmarked
+	func run():
+		
+		var stack = [start_vertex]
+		while not stack.empty():
 			
-			if vertex.value == value:
-				reset_visit()
-				return vertex
+			var vertex = stack.pop_front()
 			
-			if not vertex.visited:
-				vertex.visited = true
-				for n in neighbours(vertex):
-					vertex_stack.push_front(n)
+			vertex.visited = true
+			
+			if vertex.type == type:
+				result = vertex
+				yield(self, "dfs_run")
+			
+			for n in graph.neighbours(vertex):
+				if not n.visited:
+					stack.push_front(n)
 		
-		return null
+		done = true
+
+class BFS_itr:
 	
-	func breadth_first_search(value, start_vertex=null):
-		if start_vertex == null:
-			start_vertex = nodes.keys()[1]
+	signal bfs_run
+	
+	var result
+	var done
+	var started
+	var graph
+	var start_vertex
+	var type
+	
+	func _init(G:Graph, init_type, vertex:Vertex):
+		start_vertex = vertex
+		self.graph = G
+		self.type = init_type
+		self.done = false
+		self.started = false
+		self.result = null
+	
+	func next():
+		if not started:
+			started = true
+			run()
+		elif not done:
+			emit_signal("bfs_run")
+	
+	# G has to be unmarked
+	func run():
 		
+		var queue = [start_vertex]
 		start_vertex.visited = true
-		var vertex_queue = [start_vertex]
 		
-		while not vertex_queue.empty():
-			var vertex = vertex_queue.pop_back()
+		while not queue.empty():
+			var vertex = queue.pop_back()
 			
-			if vertex.value == value:
-				reset_visit()
-				return vertex
+			if vertex.type == type:
+				result = vertex
+				yield(self, "bfs_run")
 			
-			for n in neighbours(vertex):
+			for n in graph.neighbours(vertex):
 				if not n.visited:
 					n.visited = true
-					vertex_queue.push_front(n)
+					queue.push_front(n)
 		
-		return null
+		done = true
+
+class SpringEmbedder:
 	
-	func basic_alg():
-		
-		
-		pass
+	var graph:Graph
+	var start_vertex:Vertex
 	
-	func mating_alg():
+	func _init(init_graph:Graph, init_start_vertex:Vertex):
 		
-		
-		pass
+		graph = init_graph
+		start_vertex = init_start_vertex
 	
-	func spanning_tree():
+	func initial_placement():
 		
+		# idea: place a vertex, place it's neighbours spreaded in fron (right) of it
 		
-		pass
+		var queue = [start_vertex]
+		start_vertex.visited=true
+		
+		while not queue.empty():
+			var delta = Vector2(0,-180)
+			var vertex = queue.pop_back()
+			var neighbours = graph.neighbours(vertex)
+			var unvisited_neighbours = 0
+			
+			if neighbours.empty():
+				continue
+			
+			for n in neighbours:
+				if not n.visited:
+					unvisited_neighbours += 1
+			
+			var angle_delta = PI / (unvisited_neighbours + 1)
+			var angle = 0
+			
+			for n in neighbours:
+				if not n.visited:
+					angle += angle_delta
+					delta = delta.rotated(angle)
+					n.position = vertex.position + delta
+					n.visited = true
+					queue.push_front(n)
+		graph.reset_visited()
 	
-	func save_graph(path="user://saves/graph.json"):
+	func spring_sum(v):
+		# factor, bigger means stronger
+		var c_spring = .03
+		# optimal length of an edge in px
+		var l = 50
+		var sum = Vector2()
 		
-		var json = JSON.print(nodes)
+		for u in graph.neighbours(v):
+			var uv = (u.position - v.position).normalized()
+			sum = c_spring * log(v.position.distance_to(u.position) / l) * uv
 		
-		var file = File.new()
-		file.open(path, File.WRITE)
-		file.store_string(json)
-		file.close()
+		return sum
 	
+	func rep_sum(v):
+		# factor, bigger means bigger force for repulsion
+		var c_rep = 2
+		# edges to non neighbours
+		var sum = Vector2()
+		for u in graph.non_neighbours(v):
+			var uv = (u.position - v.position).normalized()
+			sum += c_rep / v.position.distance_squared_to(u.position) * uv
+		
+		return sum
 	
-	func load_graph(path="user://saves/graph.json"):
+	# spring embedder after eades 1984
+	func run(K = 100, epsilon = .05, delta = 1.3):
+		# K number of iterations
+		# epsilon number of forcetreshold, if there's only weak forces stop
+		# delta factor for applying force to vertex
 		
-		var file = File.new()
-		file.open(path, File.READ)
-		var json = file.get_as_text()
-		file.close()
+		graph.reset_visited()
 		
-		nodes = JSON.parse(json).result
-	
-	func get_adjacency_matrix_representation():
+		initial_placement()
 		
-		pass
+		# F dictionary with forces for each vertex
+		var F = {}
+		# interation index
+		var t = 1
+		# max Force currently
+		var max_F = Vector2(1,0)
+		
+		while t < K and max_F.length() > epsilon:
+			for v in graph.vertices:
+				var f = spring_sum(v) + rep_sum(v)
+				if f.length() > max_F.length():
+					max_F = f
+				F[v] = f
+			
+			for v in graph.vertices:
+				v.position = v.position + delta * F[v]
+				
+			t += 1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
