@@ -41,8 +41,8 @@ class Graph:
 		return vertex_A in neighbours(vertex_B)
 	
 	func neighbours(vertex):
-		
-		return in_vertices[vertex] + out_vertices[vertex]
+	
+		return in_vertices.get(vertex, []) + out_vertices.get(vertex, [])
 	
 	func non_neighbours(vertex):
 		var non_neighbours = []
