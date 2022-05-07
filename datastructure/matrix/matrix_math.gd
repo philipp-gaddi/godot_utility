@@ -1,17 +1,10 @@
-extends Node
+extends Object
 
 # math matrix lib that contains:
 # matrix contstructor, nxm and diagonal 
 # matrix operations, add, dot, T, determinante, inverse, solving Ax = b for x, matrix to string
 
-
-func _ready():
-	# Called every time the node is added to the scene.
-	# Initialization here
-	pass
-
-
-
+# todo modolarization
 
 ########################################## Matrix library
 class Matrix:
